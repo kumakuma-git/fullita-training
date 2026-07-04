@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>フル板 訓練用ダミー</title>
+<style>
+  :root{
+    --bg:#12151c; --panel:#1a1f2b; --line:#2c3446;
+    --text:#e8ecf4; --dim:#8a93a8;
+    --up:#ff5a5a; --down:#4da3ff; --flat:#e8ecf4;
+    --askTint:rgba(77,163,255,.10); --bidTint:rgba(255,90,90,.10);
+    --cur:#ffd54a;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:"BIZ UDGothic","Meiryo",Consolas,monospace;
+    font-size:14px; height:100vh; height:100dvh;
+    display:flex; flex-direction:column; overflow:hidden;
+    -webkit-text-size-adjust:100%;
+  }
+  header{
+    display:flex; align-items:center; gap:18px; flex-wrap:wrap;
+    padding:8px 14px; background:var(--panel); border-bottom:1px solid var(--line);
+  }
+  .stockName{font-size:16px; font-weight:bold;}
+  .num{font-family:Consolas,monospace;}
+  #price{font-size:22px; font-weight:bold;}
+  .up{color:var(--up);} .down{color:var(--down);} .flat{color:var(--flat);}
+  header .lbl{color:var(--dim); font-size:12px; margin-right:4px;}
+  .controls{display:flex; align-items:center; gap:8px; margin-left:auto; flex-wrap:wrap;}
+  button{
+    background:#273046; color:var(--text); border:1px solid var(--line);
+    border-radius:4px; padding:5px 12px; font-size:13px; cursor:pointer;
+    font-family:inherit;
+  }
+  button:hover{background:#324060;}
+  button.active{background:#4d6398; border-color:#6a83bd;}
+  #btnReset{background:#3a2b2b;}
+  #btnReset:hover{background:#553a3a;}
+  label.chk{font-size:12px; color:var(--dim); display:flex; align-items:center; gap:4px; cursor:pointer;}
+
+  main{flex:1; display:flex; gap:8px; padding:8px; min-height:0;}
+  section{
+    background:var(--panel); border:1px solid var(--line); border-radius:6px;
+    display:flex; flex-direction:column; min-height:0;
+  }
+  .secTitle{
+    padding:6px 10px; font-size:12px; color:var(--dim);
+    border-bottom:1px solid var(--line); flex-shrink:0;
+  }
+  #chartSec{flex:1.2; min-width:260px;}
+  #chartWrap{flex:1; min-height:0; position:relative;}
+  #chart{position:absolute; inset:0; width:100%; height:100%;}
+
+  #boardSec{width:330px; flex-shrink:0;}
+  .boardHead,.boardRow{
+    display:grid; grid-template-columns:1fr 86px 1fr; text-align:right;
+  }
+  .boardHead{
+    padding:4px 8px; font-size:12px; color:var(--dim);
+    border-bottom:1px solid var(--line); flex-shrink:0;
+  }
+  .boardHead .c{text-align:center;}
+  .overRow{
+    display:grid; grid-template-columns:1fr 86px 1fr; text-align:right;
+    padding:3px 8px; font-size:13px; color:var(--dim);
+    border-bottom:1px solid var(--line); flex-shrink:0; font-family:Consolas,monospace;
+  }
+  .overRow .c{text-align:center; font-family:inherit;}
+  #board{flex:1; overflow-y:auto; min-height:0; position:relative;}
+  .boardRow{padding:1px 8px; line-height:20px; font-family:Consolas,monospace;}
+  .boardRow .ask{background:var(--askTint); padding-right:6px; color:#bcd6ff;}
+  .boardRow .bid{background:var(--bidTint); padding-right:6px; color:#ffc9c9;}
+  .boardRow .p{text-align:center; color:var(--dim);}
+  .boardRow.cur .p{
+    color:#000; background:var(--cur); font-weight:bold; border-radius:3px;
+  }
+  .cell.flash{animation:fl .6s;}
+  @keyframes fl{from{background:#6b5c14;}to{}}
+
+  #tapeSec{width:250px; flex-shrink:0;}
+  .tapeHead,.tapeRow{
+    display:grid; grid-template-columns:78px 66px 1fr; text-align:right; padding:1px 10px;
+  }
+  .tapeHead{
+    font-size:12px; color:var(--dim); padding:4px 10px;
+    border-bottom:1px solid var(--line); flex-shrink:0;
+  }
+  #tape{flex:1; overflow-y:auto; min-height:0; font-family:Consolas,monospace;}
+  .tapeRow{line-height:20px;}
+  .tapeRow .t{color:var(--dim);}
+  .tapeRow.big{font-weight:bold; background:rgba(255,213,74,.08);}
+
+  footer{
+    padding:5px 14px; font-size:12px; color:var(--dim);
+    background:var(--panel); border-top:1px solid var(--line);
+  }
+  ::-webkit-scrollbar{width:10px;}
+  ::-webkit-scrollbar-thumb{background:#39435c; border-radius:5px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+
+  /* タッチ操作の端末（iPadなど）はボタンを大きめに */
+  @media (pointer:coarse){
+    button{padding:10px 16px; font-size:15px;}
+    label.chk{font-size:14px;}
+    label.chk input{width:20px; height:20px;}
+    .boardRow{line-height:26px;}
+    .tapeRow{line-height:26px;}
+  }
+
+  /* 幅が狭い画面（iPad縦向きなど）：チャートを上、板と歩み値を下に並べる */
+  @media (max-width:980px){
+    main{flex-wrap:wrap; overflow-y:auto;}
+    #chartSec{flex:none; width:100%; min-width:0; height:200px;}
+    #boardSec{flex:1.3; width:auto; min-width:300px; height:calc(100% - 216px);}
+    #tapeSec{flex:1; width:auto; min-width:210px; height:calc(100% - 216px);}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="stockName">ダミー株式（0000）</div>
+  <div><span class="lbl">現在値</span><span id="price" class="num flat">---</span> <span id="diff" class="num flat"></span></div>
+  <div><span class="lbl">出来高</span><span id="vol" class="num">0</span> 株</div>
+  <div><span class="lbl">時刻</span><span id="clock" class="num">9:00:00</span></div>
+  <div class="controls">
+    <button id="btnPause">⏸ 一時停止</button>
+    <span class="lbl">速度</span>
+    <button class="spd" data-s="0.5">0.5倍</button>
+    <button class="spd active" data-s="1">1倍</button>
+    <button class="spd" data-s="2">2倍</button>
+    <button class="spd" data-s="5">5倍</button>
+    <button id="btnReset">🔄 リセット（新しい銘柄）</button>
+    <label class="chk"><input type="checkbox" id="autoCenter" checked>板を自動で中央に戻す</label>
+  </div>
+</header>
+
+<main>
+  <section id="chartSec">
+    <div class="secTitle">📈 値動きチャート（点線＝前日終値）</div>
+    <div id="chartWrap"><canvas id="chart"></canvas></div>
+  </section>
+
+  <section id="boardSec">
+    <div class="secTitle">📋 フル板</div>
+    <div class="boardHead"><div>売気配（株）</div><div class="c">値段</div><div>買気配（株）</div></div>
+    <div class="overRow"><div id="overQty"></div><div class="c">OVER</div><div></div></div>
+    <div id="board"></div>
+    <div class="overRow"><div></div><div class="c">UNDER</div><div id="underQty"></div></div>
+  </section>
+
+  <section id="tapeSec">
+    <div class="secTitle">⏱ 歩み値（約定履歴）</div>
+    <div class="tapeHead"><div>時刻</div><div>値段</div><div>株数</div></div>
+    <div id="tape"></div>
+  </section>
+</main>
+
+<footer>
+  赤＝直前より高く約定 ／ 青＝直前より安く約定 ／ 板の黄色い行＝現在値 ／ 歩み値の太字＝大口（5,000株以上）
+</footer>
+
+<script>
+"use strict";
+
+// ===== 設定 =====
+const RANGE = 150;          // 現在値の上下に何円分の板を持つか
+const BASE_INTERVAL = 450;  // 1倍速のときの更新間隔（ミリ秒）
+
+// ===== 状態 =====
+let basePrice, prevClose, lastPrice, prevTradePrice;
+let minP, maxP;
+let askQty, bidQty;         // 価格ごとの注文株数（配列）
+let bestAskP, bestBidP;
+let volume, momentum, simTime;
+let overQty, underQty;
+let trades = [];            // チャート用の約定価格リスト
+let paused = false, speed = 1, timer = null;
+let rowMap = new Map();     // 価格 → 板の行DOM
+let curRow = null;
+
+const $ = id => document.getElementById(id);
+const board = $("board"), tape = $("tape");
+const fmt = n => n.toLocaleString("ja-JP");
+const rand = Math.random;
+const idx = p => p - minP;
+
+// ===== 初期化 =====
+function initSim(){
+  basePrice = 1000 + Math.floor(rand() * 2001);       // 1000〜3000円
+  prevClose = basePrice - (Math.floor(rand() * 31) - 15);
+  lastPrice = basePrice;
+  prevTradePrice = basePrice;
+  minP = basePrice - RANGE;
+  maxP = basePrice + RANGE;
+  bestBidP = basePrice - 1;
+  bestAskP = basePrice;
+  volume = 0; momentum = 0; simTime = 9 * 3600;
+  trades = [basePrice];
+  overQty  = 200000 + Math.floor(rand() * 400000);
+  underQty = 200000 + Math.floor(rand() * 400000);
+
+  askQty = new Array(maxP - minP + 1).fill(0);
+  bidQty = new Array(maxP - minP + 1).fill(0);
+  for(let p = bestAskP; p <= maxP; p++) askQty[idx(p)] = randInitQty();
+  for(let p = minP; p <= bestBidP; p++) bidQty[idx(p)] = randInitQty();
+
+  buildBoard();
+  tape.innerHTML = "";
+  updateHeader();
+  renderAll();
+  centerBoard(true);
+  drawChart();
+}
+
+function randInitQty(){
+  if(rand() < 0.12) return 0;                          // 空の価格帯
+  if(rand() < 0.04) return (100 + Math.floor(rand() * 400)) * 100;  // 大口の壁 1万〜5万株
+  return (1 + Math.floor(rand() * 25)) * 100;          // 100〜2500株
+}
+
+function randOrderQty(){
+  const r = rand();
+  if(r < 0.70) return (1 + Math.floor(rand() * 10)) * 100;    // 100〜1000株
+  if(r < 0.95) return (10 + Math.floor(rand() * 40)) * 100;   // 1000〜5000株
+  return (50 + Math.floor(rand() * 150)) * 100;               // 5000〜2万株
+}
+
+// ===== 板のDOM =====
+function buildBoard(){
+  board.innerHTML = "";
+  rowMap.clear();
+  curRow = null;
+  const frag = document.createDocumentFragment();
+  for(let p = maxP; p >= minP; p--){
+    const row = document.createElement("div");
+    row.className = "boardRow";
+    row.innerHTML = '<div class="cell ask"></div><div class="p"></div><div class="cell bid"></div>';
+    row.children[1].textContent = fmt(p);
+    frag.appendChild(row);
+    rowMap.set(p, row);
+  }
+  board.appendChild(frag);
+}
+
+function renderPrice(p, flash){
+  const row = rowMap.get(p);
+  if(!row) return;
+  const a = askQty[idx(p)], b = bidQty[idx(p)];
+  const askCell = row.children[0], bidCell = row.children[2];
+  askCell.textContent = a > 0 ? fmt(a) : "";
+  bidCell.textContent = b > 0 ? fmt(b) : "";
+  if(flash){
+    const cell = a > 0 || b === 0 && p >= bestAskP ? askCell : bidCell;
+    cell.classList.remove("flash");
+    void cell.offsetWidth;
+    cell.classList.add("flash");
+  }
+}
+
+function renderAll(){
+  for(let p = minP; p <= maxP; p++) renderPrice(p, false);
+  markCurrent();
+  $("overQty").textContent = fmt(overQty);
+  $("underQty").textContent = fmt(underQty);
+}
+
+function markCurrent(){
+  if(curRow) curRow.classList.remove("cur");
+  curRow = rowMap.get(lastPrice) || null;
+  if(curRow) curRow.classList.add("cur");
+}
+
+function centerBoard(force){
+  if(!force && !$("autoCenter").checked) return;
+  const row = rowMap.get(lastPrice);
+  if(!row) return;
+  board.scrollTop = row.offsetTop - board.clientHeight / 2 + row.clientHeight / 2;
+}
+
+// ===== 歩み値 =====
+function printTrade(price, qty){
+  volume += qty;
+  trades.push(price);
+  if(trades.length > 600) trades.shift();
+
+  const cls = price > prevTradePrice ? "up" : price < prevTradePrice ? "down" : "flat";
+  prevTradePrice = price;
+
+  const row = document.createElement("div");
+  row.className = "tapeRow" + (qty >= 5000 ? " big" : "");
+  row.innerHTML =
+    '<div class="t">' + clockStr() + '</div>' +
+    '<div class="' + cls + '">' + fmt(price) + '</div>' +
+    '<div class="' + cls + '">' + fmt(qty) + '</div>';
+  tape.insertBefore(row, tape.firstChild);
+  while(tape.children.length > 80) tape.removeChild(tape.lastChild);
+}
+
+// ===== シミュレーション本体 =====
+function tick(){
+  simTime += 0.3 + rand() * 1.2;
+
+  // 勢い（トレンド）はゆっくり変化する
+  momentum += (rand() - 0.5) * 0.05;
+  momentum *= 0.99;
+  if(lastPrice > basePrice + RANGE - 40) momentum -= 0.03;  // 端に近づいたら戻す
+  if(lastPrice < basePrice - RANGE + 40) momentum += 0.03;
+  momentum = Math.max(-0.35, Math.min(0.35, momentum));
+
+  const dirty = new Set();
+  const n = 1 + Math.floor(rand() * 3);
+  for(let i = 0; i < n; i++){
+    const r = rand();
+    if(r < 0.45) marketOrder(dirty);
+    else if(r < 0.80) limitAdd(dirty);
+    else cancelOrder(dirty);
+  }
+
+  // スプレッドが開きすぎたら注文を入れて埋める
+  while(bestAskP - bestBidP > 4){
+    if(rand() < 0.5) limitAdd(dirty, "buy", true);
+    else limitAdd(dirty, "sell", true);
+  }
+
+  // OVER/UNDERもそれっぽく揺らす
+  overQty  = Math.max(50000, overQty  + (Math.floor(rand() * 41) - 20) * 100);
+  underQty = Math.max(50000, underQty + (Math.floor(rand() * 41) - 20) * 100);
+
+  for(const p of dirty) renderPrice(p, true);
+  markCurrent();
+  $("overQty").textContent = fmt(overQty);
+  $("underQty").textContent = fmt(underQty);
+  updateHeader();
+  centerBoard(false);
+  drawChart();
+}
+
+function marketOrder(dirty){
+  const isBuy = rand() < 0.5 + momentum;
+  let size = randOrderQty();
+  let levels = 0;
+
+  if(isBuy){
+    while(size > 0 && levels < 8 && bestAskP <= maxP){
+      const q = askQty[idx(bestAskP)];
+      if(q <= 0){ bestAskP++; continue; }
+      const take = Math.min(q, size);
+      askQty[idx(bestAskP)] -= take;
+      size -= take;
+      lastPrice = bestAskP;
+      printTrade(bestAskP, take);
+      dirty.add(bestAskP);
+      if(askQty[idx(bestAskP)] === 0){ bestAskP++; levels++; }
+    }
+    // 買い方が気配を切り上げてくる
+    if(rand() < 0.55 && bestAskP - bestBidP > 1){
+      const p = bestAskP - 1;
+      bidQty[idx(p)] += (1 + Math.floor(rand() * 15)) * 100;
+      bestBidP = p;
+      dirty.add(p);
+    }
+  }else{
+    while(size > 0 && levels < 8 && bestBidP >= minP){
+      const q = bidQty[idx(bestBidP)];
+      if(q <= 0){ bestBidP--; continue; }
+      const take = Math.min(q, size);
+      bidQty[idx(bestBidP)] -= take;
+      size -= take;
+      lastPrice = bestBidP;
+      printTrade(bestBidP, take);
+      dirty.add(bestBidP);
+      if(bidQty[idx(bestBidP)] === 0){ bestBidP--; levels++; }
+    }
+    if(rand() < 0.55 && bestAskP - bestBidP > 1){
+      const p = bestBidP + 1;
+      askQty[idx(p)] += (1 + Math.floor(rand() * 15)) * 100;
+      bestAskP = p;
+      dirty.add(p);
+    }
+  }
+}
+
+function limitAdd(dirty, forceSide, inSpreadOnly){
+  const isBuy = forceSide ? forceSide === "buy" : rand() < 0.5;
+  const qty = randOrderQty();
+  let p;
+
+  if(inSpreadOnly || (rand() < 0.30 && bestAskP - bestBidP > 1)){
+    // スプレッドの内側に入れる（気配の切り上げ・切り下げ）
+    const gap = bestAskP - bestBidP;
+    if(gap <= 1) return;
+    p = bestBidP + 1 + Math.floor(rand() * (gap - 1));
+  }else{
+    const d = Math.floor(-Math.log(1 - rand()) * 3);
+    p = isBuy ? bestBidP - d : bestAskP + d;
+  }
+  if(p < minP || p > maxP) return;
+
+  if(isBuy){
+    if(p >= bestAskP) p = bestAskP - 1;
+    if(p < minP) return;
+    bidQty[idx(p)] += qty;
+    if(p > bestBidP) bestBidP = p;
+  }else{
+    if(p <= bestBidP) p = bestBidP + 1;
+    if(p > maxP) return;
+    askQty[idx(p)] += qty;
+    if(p < bestAskP) bestAskP = p;
+  }
+  dirty.add(p);
+}
+
+function cancelOrder(dirty){
+  const isBuy = rand() < 0.5;
+  const arr = isBuy ? bidQty : askQty;
+  const candidates = [];
+  if(isBuy){
+    for(let p = bestBidP; p >= Math.max(minP, bestBidP - 14); p--)
+      if(arr[idx(p)] > 0) candidates.push(p);
+  }else{
+    for(let p = bestAskP; p <= Math.min(maxP, bestAskP + 14); p++)
+      if(arr[idx(p)] > 0) candidates.push(p);
+  }
+  if(candidates.length === 0) return;
+  const p = candidates[Math.floor(rand() * candidates.length)];
+  const cut = Math.min(arr[idx(p)], (1 + Math.floor(rand() * 20)) * 100);
+  arr[idx(p)] -= cut;
+  dirty.add(p);
+  if(arr[idx(p)] === 0){
+    if(isBuy && p === bestBidP){ while(bestBidP > minP && bidQty[idx(bestBidP)] === 0) bestBidP--; }
+    if(!isBuy && p === bestAskP){ while(bestAskP < maxP && askQty[idx(bestAskP)] === 0) bestAskP++; }
+  }
+}
+
+// ===== 表示更新 =====
+function clockStr(){
+  const t = Math.floor(simTime);
+  const h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s = t % 60;
+  return h + ":" + String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
+}
+
+function updateHeader(){
+  const d = lastPrice - prevClose;
+  const cls = d > 0 ? "up" : d < 0 ? "down" : "flat";
+  const priceEl = $("price"), diffEl = $("diff");
+  priceEl.textContent = fmt(lastPrice);
+  priceEl.className = "num " + cls;
+  diffEl.textContent = (d > 0 ? "▲ +" : d < 0 ? "▼ " : "") + fmt(d) + "（前日比）";
+  diffEl.className = "num " + cls;
+  $("vol").textContent = fmt(volume);
+  $("clock").textContent = clockStr();
+}
+
+// ===== チャート =====
+const canvas = $("chart"), ctx = canvas.getContext("2d");
+
+function drawChart(){
+  const wrap = $("chartWrap");
+  const W = wrap.clientWidth, H = wrap.clientHeight;
+  const dpr = window.devicePixelRatio || 1;
+  if(canvas.width !== W * dpr || canvas.height !== H * dpr){
+    canvas.width = W * dpr; canvas.height = H * dpr;
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+
+  const data = trades.slice(-400);
+  if(data.length < 2) return;
+  let lo = Math.min(...data, prevClose), hi = Math.max(...data, prevClose);
+  const pad = Math.max(2, (hi - lo) * 0.1);
+  lo -= pad; hi += pad;
+  const x = i => 8 + i / (data.length - 1) * (W - 60);
+  const y = v => H - 10 - (v - lo) / (hi - lo) * (H - 20);
+
+  // 前日終値の点線
+  ctx.strokeStyle = "#8a93a8"; ctx.lineWidth = 1;
+  ctx.setLineDash([5, 5]);
+  ctx.beginPath(); ctx.moveTo(0, y(prevClose)); ctx.lineTo(W, y(prevClose)); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = "#8a93a8"; ctx.font = "11px Consolas";
+  ctx.fillText(fmt(prevClose), W - 50, y(prevClose) - 4);
+
+  // 値動きの線
+  ctx.strokeStyle = "#ffd54a"; ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  data.forEach((v, i) => i === 0 ? ctx.moveTo(x(i), y(v)) : ctx.lineTo(x(i), y(v)));
+  ctx.stroke();
+
+  // 現在値ラベル
+  const cur = data[data.length - 1];
+  ctx.fillStyle = "#ffd54a";
+  ctx.fillText(fmt(cur), W - 50, y(cur) + 4);
+}
+
+// ===== 操作 =====
+function startTimer(){
+  if(timer) clearInterval(timer);
+  timer = setInterval(() => { if(!paused) tick(); }, BASE_INTERVAL / speed);
+}
+
+$("btnPause").addEventListener("click", () => {
+  paused = !paused;
+  $("btnPause").textContent = paused ? "▶ 再開" : "⏸ 一時停止";
+});
+
+document.querySelectorAll(".spd").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".spd").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    speed = parseFloat(btn.dataset.s);
+    startTimer();
+  });
+});
+
+$("btnReset").addEventListener("click", () => {
+  initSim();
+  paused = false;
+  $("btnPause").textContent = "⏸ 一時停止";
+});
+
+window.addEventListener("resize", drawChart);
+
+// ===== 開始 =====
+initSim();
+startTimer();
+</script>
+</body>
+</html>
