@@ -205,8 +205,8 @@ function initSim(){
 
   askQty = new Array(maxP - minP + 1).fill(0);
   bidQty = new Array(maxP - minP + 1).fill(0);
-  for(let p = bestAskP; p <= maxP; p++) askQty[idx(p)] = randInitQty();
-  for(let p = minP; p <= bestBidP; p++) bidQty[idx(p)] = randInitQty();
+  for(let p = bestAskP; p <= maxP; p++) askQty[idx(p)] = randInitQty(p - basePrice);
+  for(let p = minP; p <= bestBidP; p++) bidQty[idx(p)] = randInitQty(basePrice - p);
 
   buildBoard();
   tape.innerHTML = "";
@@ -216,10 +216,11 @@ function initSim(){
   drawChart();
 }
 
-function randInitQty(){
-  if(rand() < 0.12) return 0;                          // 空の価格帯
+function randInitQty(dist){
+  if(rand() < 0.02) return 0;                          // ごくまれに空の価格帯
   if(rand() < 0.04) return (100 + Math.floor(rand() * 400)) * 100;  // 大口の壁 1万〜5万株
-  return (1 + Math.floor(rand() * 25)) * 100;          // 100〜2500株
+  const depth = 1 + dist / 50;                         // 現在値から遠い価格ほど注文が積み上がっている
+  return (1 + Math.floor(rand() * 25 * depth)) * 100;  // 100株〜（遠い価格帯は1万株規模）
 }
 
 function randOrderQty(){
@@ -303,6 +304,8 @@ function printTrade(price, qty){
 // ===== シミュレーション本体 =====
 function tick(){
   simTime += 0.3 + rand() * 1.2;
+  if(simTime >= 11.5 * 3600 && simTime < 12.5 * 3600) simTime = 12.5 * 3600;  // 昼休み（11:30〜12:30）は飛ばす
+  if(simTime >= 15.5 * 3600){ newDay(); return; }                             // 15:30大引け→翌営業日の9:00へ
 
   // 勢い（トレンド）はゆっくり変化する
   momentum += (rand() - 0.5) * 0.05;
@@ -325,6 +328,9 @@ function tick(){
     if(rand() < 0.5) limitAdd(dirty, "buy", true);
     else limitAdd(dirty, "sell", true);
   }
+
+  // 空いた価格帯に新しい指値が入り、板がほぼ埋まった状態を保つ
+  replenish(dirty);
 
   // OVER/UNDERもそれっぽく揺らす
   overQty  = Math.max(50000, overQty  + (Math.floor(rand() * 41) - 20) * 100);
@@ -414,6 +420,39 @@ function limitAdd(dirty, forceSide, inSpreadOnly){
   dirty.add(p);
 }
 
+// 空いた価格帯に新しい指値を補充する（値段が通り過ぎた跡地もフル板らしく埋め直す）
+function replenish(dirty){
+  // 気配のすぐ近く（20円以内）は優先的に埋まる
+  for(let p = bestAskP; p <= Math.min(maxP, bestAskP + 20); p++){
+    if(askQty[idx(p)] === 0 && rand() < 0.35){
+      askQty[idx(p)] = (1 + Math.floor(rand() * 15)) * 100;
+      dirty.add(p);
+    }
+  }
+  for(let p = Math.max(minP, bestBidP - 20); p <= bestBidP; p++){
+    if(bidQty[idx(p)] === 0 && rand() < 0.35){
+      bidQty[idx(p)] = (1 + Math.floor(rand() * 15)) * 100;
+      dirty.add(p);
+    }
+  }
+  // 遠い価格帯にもぽつぽつ指値が入る（遠いほど厚めに積まれる）
+  for(let i = 0; i < 10; i++){
+    if(rand() < 0.5){
+      const p = bestAskP + Math.floor(rand() * (maxP - bestAskP + 1));
+      if(p >= bestAskP && p <= maxP && askQty[idx(p)] === 0){
+        askQty[idx(p)] = (1 + Math.floor(rand() * 25 * (1 + (p - bestAskP) / 50))) * 100;
+        dirty.add(p);
+      }
+    }else{
+      const p = bestBidP - Math.floor(rand() * (bestBidP - minP + 1));
+      if(p >= minP && p <= bestBidP && bidQty[idx(p)] === 0){
+        bidQty[idx(p)] = (1 + Math.floor(rand() * 25 * (1 + (bestBidP - p) / 50))) * 100;
+        dirty.add(p);
+      }
+    }
+  }
+}
+
 function cancelOrder(dirty){
   const isBuy = rand() < 0.5;
   const arr = isBuy ? bidQty : askQty;
@@ -434,6 +473,18 @@ function cancelOrder(dirty){
     if(isBuy && p === bestBidP){ while(bestBidP > minP && bidQty[idx(bestBidP)] === 0) bestBidP--; }
     if(!isBuy && p === bestAskP){ while(bestAskP < maxP && askQty[idx(bestAskP)] === 0) bestAskP++; }
   }
+}
+
+// 大引け後は前日終値を更新して翌営業日の9:00から再開（板と価格は引き継ぐ）
+function newDay(){
+  prevClose = lastPrice;
+  prevTradePrice = lastPrice;
+  volume = 0;
+  simTime = 9 * 3600;
+  trades = [lastPrice];
+  tape.innerHTML = "";
+  updateHeader();
+  drawChart();
 }
 
 // ===== 表示更新 =====
