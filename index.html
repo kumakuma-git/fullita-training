@@ -146,10 +146,17 @@
   #quizOverlay.show{display:flex;}
   #quizCard{
     background:var(--panel); border:1px solid var(--line); border-radius:10px;
-    padding:24px; max-width:420px; width:100%; text-align:center;
+    padding:24px; max-width:460px; width:100%; text-align:center;
+    max-height:86vh; overflow-y:auto;
   }
   #quizCard h2{font-size:16px; margin-bottom:12px;}
   #quizResultText{font-size:13px; line-height:1.6; margin-bottom:10px;}
+  #quizMistakes{text-align:left; font-size:12px; margin-bottom:14px;}
+  #quizMistakes p{color:var(--dim);}
+  .mistakeList{max-height:150px; overflow-y:auto; border:1px solid var(--line); border-radius:6px; padding:6px 8px;}
+  .mistakeList div{padding:3px 0; border-bottom:1px solid var(--line); line-height:1.5;}
+  .mistakeList div:last-child{border-bottom:none;}
+  .mistakeAdvice{margin-top:8px; color:#ffd54a; line-height:1.7;}
   #quizHistory{text-align:left; font-size:11px; color:var(--dim); max-height:140px; overflow-y:auto;}
   #quizHistory div{padding:2px 0; border-bottom:1px solid var(--line);}
   .quizBtnRow{display:flex; gap:8px; justify-content:center; margin-top:14px;}
@@ -216,6 +223,7 @@
   <div id="quizCard">
     <h2>🎯 板の厚さクイズ 結果</h2>
     <p id="quizResultText"></p>
+    <div id="quizMistakes"></div>
     <div id="quizHistory"></div>
     <div class="quizBtnRow">
       <button id="btnQuizAgain">🔁 もう10問</button>
@@ -619,7 +627,8 @@ const QUIZ_GOAL_SEC = 2.0;   // 卒業条件：2秒以内
 const QUIZ_FEEDBACK_MS = 2000; // 正解を板に表示しておく時間
 
 let quizOn = false, quizRound = 0, quizScore = 0, quizFastCorrect = 0;
-let quizTimes = [], quizStart = 0, quizAnswered = false;
+let quizTimes = [], quizStart = 0, quizAnswered = false, quizLog = [];
+let curAskSum = 0, curBidSum = 0, curDiffPct = 0, curActual = "";
 
 const quizBar = $("quizBar"), quizAnswers = $("quizAnswers"),
       quizFeedback = $("quizFeedback"), quizProgress = $("quizProgress"),
@@ -678,7 +687,7 @@ function clearQuizHighlight(){
 
 function startQuiz(){
   quizOn = true;
-  quizRound = 0; quizScore = 0; quizFastCorrect = 0; quizTimes = [];
+  quizRound = 0; quizScore = 0; quizFastCorrect = 0; quizTimes = []; quizLog = [];
   paused = true; $("btnPause").textContent = "▶ 再開";
   quizOverlay.classList.remove("show");
   quizBar.classList.add("show");
@@ -694,6 +703,10 @@ function nextQuizRound(){
   quizFeedback.className = "";
   quizProgress.textContent = `問題 ${quizRound}/${QUIZ_ROUNDS}`;
   regenQuizBoard();
+  curAskSum = sumRange(askQty, bestAskP, bestAskP + QUIZ_LEVELS - 1);
+  curBidSum = sumRange(bidQty, bestBidP - QUIZ_LEVELS + 1, bestBidP);
+  curDiffPct = Math.abs(curAskSum - curBidSum) / Math.max(curAskSum, curBidSum, 1) * 100;
+  curActual = actualThicker();
   quizStart = performance.now();
 }
 
@@ -701,15 +714,19 @@ function answerQuiz(choice){
   if(!quizOn || quizAnswered) return;
   quizAnswered = true;
   const elapsed = (performance.now() - quizStart) / 1000;
-  const correct = choice === actualThicker();
+  const correct = choice === curActual;
   quizTimes.push(elapsed);
+  quizLog.push({
+    round: quizRound, chosen: choice, actual: curActual, correct,
+    elapsed, diffPct: Math.round(curDiffPct * 10) / 10,
+  });
   if(correct){
     quizScore++;
     if(elapsed <= QUIZ_GOAL_SEC) quizFastCorrect++;
     quizFeedback.textContent = `✅ 正解（${elapsed.toFixed(1)}秒）`;
     quizFeedback.className = "correct";
   }else{
-    quizFeedback.textContent = `❌ 不正解（正解は${quizLabel(actualThicker())}・${elapsed.toFixed(1)}秒）`;
+    quizFeedback.textContent = `❌ 不正解（正解は${quizLabel(curActual)}・${elapsed.toFixed(1)}秒）`;
     quizFeedback.className = "wrong";
   }
   highlightQuizRange();
@@ -726,9 +743,50 @@ function endQuiz(){
   quizResultText.textContent =
     `正答 ${quizScore}/${QUIZ_ROUNDS}（${Math.round(quizScore / QUIZ_ROUNDS * 100)}%）　平均反応時間 ${avg.toFixed(1)}秒　` +
     `卒業条件（2秒以内で正解）達成 ${quizFastCorrect}/${QUIZ_ROUNDS}`;
+  renderQuizMistakes();
   saveQuizResult(avg);
   renderQuizHistory();
   quizOverlay.classList.add("show");
+}
+
+function renderQuizMistakes(){
+  const el = $("quizMistakes");
+  const misses = quizLog.filter(r => !r.correct);
+  if(misses.length === 0){
+    el.innerHTML = "<p>間違いなし。全問正解。</p>";
+    return;
+  }
+
+  const rows = misses.map(r =>
+    `<div>問題${r.round}：回答「${quizLabel(r.chosen)}」／正解「${quizLabel(r.actual)}」／実際の差${r.diffPct}%／反応${r.elapsed.toFixed(1)}秒</div>`
+  ).join("");
+
+  // 傾向を分析（際どい判定か、明確な見逃しか、方向の偏りか、反応が速すぎるか）
+  const closeCalls = misses.filter(r => r.diffPct < 10);
+  const clearMisses = misses.filter(r => r.diffPct >= 20);
+  const sameMissed = misses.filter(r => r.actual === "same" && r.chosen !== "same").length;
+  const calledSameWrongly = misses.filter(r => r.chosen === "same" && r.actual !== "same").length;
+  const rushed = misses.filter(r => r.elapsed < 1.0).length;
+
+  const advice = [];
+  if(closeCalls.length > 0){
+    advice.push(`${closeCalls.length}/${misses.length}件は差10%未満の際どい判定。慌てなくていい範囲`);
+  }
+  if(clearMisses.length > 0){
+    const list = clearMisses.map(r => `問題${r.round}（差${r.diffPct}%）`).join("・");
+    advice.push(`${list}は差が大きいのに見逃している。壁（突出した数字）の見落としの可能性`);
+  }
+  if(sameMissed > 0){
+    advice.push(`「同じくらい」が正解の場面を${sameMissed}回、片方が厚いと判断して外している`);
+  }
+  if(calledSameWrongly > 0){
+    advice.push(`実際は差があったのに「同じくらい」と判断した場面が${calledSameWrongly}回`);
+  }
+  if(rushed > 0){
+    advice.push(`${rushed}件は反応1秒未満での不正解。考える前に押している可能性`);
+  }
+
+  el.innerHTML = `<div class="mistakeList">${rows}</div><div class="mistakeAdvice">${advice.map(a => "・" + a).join("<br>")}</div>`;
 }
 
 function saveQuizResult(avg){
