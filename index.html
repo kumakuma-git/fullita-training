@@ -118,7 +118,25 @@
     #tapeSec{flex:1; width:auto; min-width:210px; height:calc(100% - 216px);}
   }
 
-  /* ===== クイズモード（板の厚さ即答訓練） ===== */
+  /* ===== クイズモード（板の厚さ即答訓練） =====
+     板を隠さないよう、出題中はboardSecの下に埋め込む（フルスクリーンでは覆わない）。
+     結果サマリーだけは板を見る必要がないのでモーダルで表示する。 */
+  #quizBar{
+    display:none; flex-direction:column; gap:6px;
+    background:#151a24; border-top:2px solid #4d6398; padding:8px 10px; flex-shrink:0;
+  }
+  #quizBar.show{display:flex;}
+  #quizBarTop{display:flex; align-items:center; justify-content:space-between;}
+  #quizProgress{color:var(--text); font-size:12px; font-weight:bold;}
+  #btnQuizExit{padding:2px 8px; font-size:11px; background:#3a2b2b;}
+  #btnQuizExit:hover{background:#553a3a;}
+  #quizHint{color:var(--dim); font-size:11px;}
+  #quizFeedback{min-height:18px; font-size:13px;}
+  #quizFeedback.correct{color:var(--down);}
+  #quizFeedback.wrong{color:var(--up);}
+  #quizAnswers{display:flex; gap:6px; flex-wrap:wrap;}
+  #quizAnswers button{flex:1; min-width:80px; padding:10px 6px; font-size:13px;}
+
   #quizOverlay{
     position:fixed; inset:0; background:rgba(10,12,18,.92);
     display:none; align-items:center; justify-content:center; z-index:50; padding:20px;
@@ -128,22 +146,13 @@
     background:var(--panel); border:1px solid var(--line); border-radius:10px;
     padding:24px; max-width:420px; width:100%; text-align:center;
   }
-  #quizCard h2{font-size:16px; margin-bottom:8px;}
-  #quizProgress{color:var(--dim); font-size:12px; margin-bottom:4px;}
-  #quizHint{color:var(--dim); font-size:12px; margin-bottom:12px;}
-  #quizFeedback{min-height:22px; font-size:14px; margin:8px 0;}
-  #quizFeedback.correct{color:var(--down);}
-  #quizFeedback.wrong{color:var(--up);}
-  #quizAnswers{display:flex; gap:8px; justify-content:center; margin:14px 0;}
-  #quizAnswers button{flex:1; padding:14px 8px; font-size:14px;}
-  #quizSummary{display:none;}
-  #quizSummary.show{display:block;}
+  #quizCard h2{font-size:16px; margin-bottom:12px;}
   #quizResultText{font-size:13px; line-height:1.6; margin-bottom:10px;}
   #quizHistory{text-align:left; font-size:11px; color:var(--dim); max-height:140px; overflow-y:auto;}
   #quizHistory div{padding:2px 0; border-bottom:1px solid var(--line);}
   .quizBtnRow{display:flex; gap:8px; justify-content:center; margin-top:14px;}
   @media (pointer:coarse){
-    #quizAnswers button{padding:18px 8px; font-size:16px;}
+    #quizAnswers button{padding:16px 6px; font-size:15px;}
   }
 </style>
 </head>
@@ -179,6 +188,19 @@
     <div class="overRow"><div id="overQty"></div><div class="c">OVER</div><div></div></div>
     <div id="board"></div>
     <div class="overRow"><div></div><div class="c">UNDER</div><div id="underQty"></div></div>
+    <div id="quizBar">
+      <div id="quizBarTop">
+        <span id="quizProgress">問題 1/10</span>
+        <button id="btnQuizExit">✕ 終了</button>
+      </div>
+      <div id="quizHint">現在値から上5本・下5本の合計株数でどちらが厚いか判定</div>
+      <div id="quizFeedback"></div>
+      <div id="quizAnswers">
+        <button data-a="bid">買い厚い</button>
+        <button data-a="same">同じくらい</button>
+        <button data-a="ask">売り厚い</button>
+      </div>
+    </div>
   </section>
 
   <section id="tapeSec">
@@ -190,21 +212,11 @@
 
 <div id="quizOverlay">
   <div id="quizCard">
-    <h2>🎯 板の厚さクイズ</h2>
-    <div id="quizProgress">問題 1/10</div>
-    <div id="quizHint">現在値から上5本・下5本の合計株数でどちらが厚いか判定</div>
-    <div id="quizFeedback"></div>
-    <div id="quizAnswers">
-      <button data-a="bid">買い厚い</button>
-      <button data-a="same">同じくらい</button>
-      <button data-a="ask">売り厚い</button>
-    </div>
-    <div id="quizSummary">
-      <p id="quizResultText"></p>
-      <div id="quizHistory"></div>
-    </div>
+    <h2>🎯 板の厚さクイズ 結果</h2>
+    <p id="quizResultText"></p>
+    <div id="quizHistory"></div>
     <div class="quizBtnRow">
-      <button id="btnQuizAgain" style="display:none;">🔁 もう10問</button>
+      <button id="btnQuizAgain">🔁 もう10問</button>
       <button id="btnQuizClose">閉じる</button>
     </div>
   </div>
@@ -606,9 +618,9 @@ const QUIZ_GOAL_SEC = 2.0;   // 卒業条件：2秒以内
 let quizOn = false, quizRound = 0, quizScore = 0, quizFastCorrect = 0;
 let quizTimes = [], quizStart = 0, quizAnswered = false;
 
-const quizOverlay = $("quizOverlay"), quizAnswers = $("quizAnswers"),
+const quizBar = $("quizBar"), quizAnswers = $("quizAnswers"),
       quizFeedback = $("quizFeedback"), quizProgress = $("quizProgress"),
-      quizSummary = $("quizSummary"), quizResultText = $("quizResultText"),
+      quizOverlay = $("quizOverlay"), quizResultText = $("quizResultText"),
       quizHistoryEl = $("quizHistory"), btnQuizAgain = $("btnQuizAgain");
 
 function sumRange(arr, from, to){
@@ -649,10 +661,9 @@ function startQuiz(){
   quizOn = true;
   quizRound = 0; quizScore = 0; quizFastCorrect = 0; quizTimes = [];
   paused = true; $("btnPause").textContent = "▶ 再開";
-  quizOverlay.classList.add("show");
-  quizSummary.classList.remove("show");
+  quizOverlay.classList.remove("show");
+  quizBar.classList.add("show");
   quizAnswers.style.display = "flex";
-  btnQuizAgain.style.display = "none";
   nextQuizRound();
 }
 
@@ -688,16 +699,14 @@ function answerQuiz(choice){
 }
 
 function endQuiz(){
-  quizAnswers.style.display = "none";
-  quizFeedback.textContent = "";
+  quizBar.classList.remove("show");
   const avg = quizTimes.reduce((a, b) => a + b, 0) / quizTimes.length;
   quizResultText.textContent =
     `正答 ${quizScore}/${QUIZ_ROUNDS}（${Math.round(quizScore / QUIZ_ROUNDS * 100)}%）　平均反応時間 ${avg.toFixed(1)}秒　` +
     `卒業条件（2秒以内で正解）達成 ${quizFastCorrect}/${QUIZ_ROUNDS}`;
-  quizSummary.classList.add("show");
-  btnQuizAgain.style.display = "inline-block";
   saveQuizResult(avg);
   renderQuizHistory();
+  quizOverlay.classList.add("show");
 }
 
 function saveQuizResult(avg){
@@ -724,7 +733,13 @@ function closeQuiz(){
   quizOverlay.classList.remove("show");
 }
 
+function exitQuizEarly(){
+  quizOn = false;
+  quizBar.classList.remove("show");
+}
+
 $("btnQuiz").addEventListener("click", startQuiz);
+$("btnQuizExit").addEventListener("click", exitQuizEarly);
 $("btnQuizClose").addEventListener("click", closeQuiz);
 btnQuizAgain.addEventListener("click", startQuiz);
 quizAnswers.querySelectorAll("button").forEach(b => {
