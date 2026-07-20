@@ -134,6 +134,7 @@
   #quizFeedback{min-height:18px; font-size:13px;}
   #quizFeedback.correct{color:var(--down);}
   #quizFeedback.wrong{color:var(--up);}
+  #quizFeedback.countdown{font-size:26px; font-weight:bold; text-align:center; color:var(--cur); padding:4px 0;}
   #quizAnswers{display:flex; gap:8px; flex-wrap:wrap;}
   #quizAnswers button{flex:1; min-width:90px; padding:18px 10px; font-size:16px; font-weight:bold;}
   .boardRow.quizHiAsk .ask{outline:2px solid #4da3ff; outline-offset:-2px; background:rgba(77,163,255,.28);}
@@ -691,8 +692,23 @@ function startQuiz(){
   paused = true; $("btnPause").textContent = "▶ 再開";
   quizOverlay.classList.remove("show");
   quizBar.classList.add("show");
-  quizAnswers.style.display = "flex";
-  nextQuizRound();
+  quizAnswers.style.display = "none";
+  quizProgress.textContent = "まもなく開始";
+  runQuizCountdown(3);
+}
+
+function runQuizCountdown(n){
+  if(!quizOn) return;  // 途中で「✕終了」された場合は止める
+  if(n > 0){
+    quizFeedback.textContent = String(n);
+    quizFeedback.className = "countdown";
+    setTimeout(() => runQuizCountdown(n - 1), 1000);
+  }else{
+    quizFeedback.textContent = "";
+    quizFeedback.className = "";
+    quizAnswers.style.display = "flex";
+    nextQuizRound();
+  }
 }
 
 function nextQuizRound(){
