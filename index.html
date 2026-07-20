@@ -134,8 +134,10 @@
   #quizFeedback{min-height:18px; font-size:13px;}
   #quizFeedback.correct{color:var(--down);}
   #quizFeedback.wrong{color:var(--up);}
-  #quizAnswers{display:flex; gap:6px; flex-wrap:wrap;}
-  #quizAnswers button{flex:1; min-width:80px; padding:10px 6px; font-size:13px;}
+  #quizAnswers{display:flex; gap:8px; flex-wrap:wrap;}
+  #quizAnswers button{flex:1; min-width:90px; padding:18px 10px; font-size:16px; font-weight:bold;}
+  .boardRow.quizHiAsk .ask{outline:2px solid #4da3ff; outline-offset:-2px; background:rgba(77,163,255,.28);}
+  .boardRow.quizHiBid .bid{outline:2px solid #ff5a5a; outline-offset:-2px; background:rgba(255,90,90,.28);}
 
   #quizOverlay{
     position:fixed; inset:0; background:rgba(10,12,18,.92);
@@ -152,7 +154,7 @@
   #quizHistory div{padding:2px 0; border-bottom:1px solid var(--line);}
   .quizBtnRow{display:flex; gap:8px; justify-content:center; margin-top:14px;}
   @media (pointer:coarse){
-    #quizAnswers button{padding:16px 6px; font-size:15px;}
+    #quizAnswers button{padding:24px 10px; font-size:19px;}
   }
 </style>
 </head>
@@ -614,6 +616,7 @@ const QUIZ_ROUNDS = 10;
 const QUIZ_LEVELS = 5;       // 上5段・下5段
 const QUIZ_SAME_TOL = 0.10;  // 差が10%未満なら「同じくらい」扱い
 const QUIZ_GOAL_SEC = 2.0;   // 卒業条件：2秒以内
+const QUIZ_FEEDBACK_MS = 2000; // 正解を板に表示しておく時間
 
 let quizOn = false, quizRound = 0, quizScore = 0, quizFastCorrect = 0;
 let quizTimes = [], quizStart = 0, quizAnswered = false;
@@ -657,6 +660,22 @@ function quizLabel(a){
   return a === "ask" ? "売り厚い" : a === "bid" ? "買い厚い" : "同じくらい";
 }
 
+function highlightQuizRange(){
+  for(let p = bestAskP; p <= bestAskP + QUIZ_LEVELS - 1; p++){
+    const row = rowMap.get(p);
+    if(row) row.classList.add("quizHiAsk");
+  }
+  for(let p = bestBidP - QUIZ_LEVELS + 1; p <= bestBidP; p++){
+    const row = rowMap.get(p);
+    if(row) row.classList.add("quizHiBid");
+  }
+}
+
+function clearQuizHighlight(){
+  document.querySelectorAll(".quizHiAsk").forEach(r => r.classList.remove("quizHiAsk"));
+  document.querySelectorAll(".quizHiBid").forEach(r => r.classList.remove("quizHiBid"));
+}
+
 function startQuiz(){
   quizOn = true;
   quizRound = 0; quizScore = 0; quizFastCorrect = 0; quizTimes = [];
@@ -668,6 +687,7 @@ function startQuiz(){
 }
 
 function nextQuizRound(){
+  clearQuizHighlight();
   quizRound++;
   quizAnswered = false;
   quizFeedback.textContent = "";
@@ -692,13 +712,15 @@ function answerQuiz(choice){
     quizFeedback.textContent = `❌ 不正解（正解は${quizLabel(actualThicker())}・${elapsed.toFixed(1)}秒）`;
     quizFeedback.className = "wrong";
   }
+  highlightQuizRange();
   setTimeout(() => {
     if(quizRound >= QUIZ_ROUNDS) endQuiz();
     else nextQuizRound();
-  }, 900);
+  }, QUIZ_FEEDBACK_MS);
 }
 
 function endQuiz(){
+  clearQuizHighlight();
   quizBar.classList.remove("show");
   const avg = quizTimes.reduce((a, b) => a + b, 0) / quizTimes.length;
   quizResultText.textContent =
@@ -736,6 +758,7 @@ function closeQuiz(){
 function exitQuizEarly(){
   quizOn = false;
   quizBar.classList.remove("show");
+  clearQuizHighlight();
 }
 
 $("btnQuiz").addEventListener("click", startQuiz);
